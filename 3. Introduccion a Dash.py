@@ -25,6 +25,7 @@ import seaborn as sns #data visualization
 # A la hora de desarrollar una aplicación para visualizar datos tendremos que combinar 
 # elementos de HTML y CSS con elementos propios de Dash. Lo primero que tendremos que 
 # hacer siempre es inicializar una aplicación de Dash
+df = pd.read_csv("https://raw.githubusercontent.com/lastriita/DataVisualization2022/main/Bank%20Customer%20Churn%20Prediction.csv")
 
 app = dash.Dash()
 
@@ -99,13 +100,24 @@ def data_bars(df, column):
 #######################################
 # Initialize
 #######################################
-df = pd.read_csv("https://raw.githubusercontent.com/lastriita/DataVisualization2022/main/Bank%20Customer%20Churn%20Prediction.csv")
+maxValues = df.max()
+minValues = df.min()
+
+max_age = maxValues["age"]
+min_age = minValues["age"]
+
+data_summary_filtered_md_template = 'Selected {:,} clients'
+data_summary_filtered_md = data_summary_filtered_md_template.format(len(df))
+
+#######################################
+# Models
+#######################################
 
 #######################################
 # Figure/plotly function
 #######################################
-def create_figure_pie():
-    level_count = df["churn"].value_counts()
+def create_figure_pie(flow_data):
+    level_count = flow_data["churn"].value_counts()
     data = [
         go.Pie(
             labels=["Never Left the Bank","Has Left the Bank at Some Point"],
@@ -124,18 +136,18 @@ def create_figure_pie():
     return go.Figure(data = data, layout = layout)
 
 
-def create_figure_boxplot():
+def create_figure_boxplot(flow_data):
     data = [
         go.Box(
 
-            y = df["balance"].loc[df["churn"]==0],
+            y = flow_data["balance"].loc[flow_data["churn"]==0],
             marker_color = "firebrick",
             name = "Clients that Never Left the Bank",
             boxmean=True
         ),
         go.Box(
 
-            y = df["balance"].loc[df["churn"]==1],
+            y = flow_data["balance"].loc[flow_data["churn"]==1],
             marker_color = "lightblue",
             name = "Client that has Left the Bank at Some Point",
             boxmean=True
@@ -149,9 +161,9 @@ def create_figure_boxplot():
 
     return go.Figure(data = data, layout = layout)
 
-def create_figure_density():
-    x1=df[df["churn"]==0]["tenure"]
-    x2=df[df["churn"]==1]["tenure"]
+def create_figure_density(flow_data):
+    x1=flow_data[flow_data["churn"]==0]["tenure"]
+    x2=flow_data[flow_data["churn"]==1]["tenure"]
     hist_data = [x1,x2]
 
     group_labels = ['Churn no','Churn yes']
@@ -206,28 +218,24 @@ app.layout = html.Div(className='app-body', children=[
                     html.Div(id='loader-trigger-2', style={"display": "none"}),
                     html.Div(id='loader-trigger-3', style={"display": "none"}),
                     html.Div(id='loader-trigger-4', style={"display": "none"}),
-                    dcc.Markdown(id='data_summary_filtered', children='data_summary_filtered_md'),
-                    html.Progress(id="selected_progress", max=f"{1000}", value=f"{1000}"),
+                    dcc.Markdown(id='data_summary_filtered', children=data_summary_filtered_md),
+                    html.Progress(id="selected_progress", max=f"{len(df)}", value=f"{len(df)}"),
                 ]),
         ]),
         html.Div(className="four columns pretty_container", children=[
             html.Label('Select pick-up age'),
             dcc.RangeSlider(id='age',
-                            value=[0, 23],
-                            min=0, max=23,
-                            marks={i: str(i) for i in range(0, 24, 3)}),
+                            value=[min_age, max_age],
+                            min=min_age, max=max_age,
+                            marks={i: str(i) for i in range(min_age, max_age, 6)}),
         ]),
         html.Div(className="four columns pretty_container", children=[
-            html.Label('Select pick-up days'),
-            dcc.Dropdown(id='days',
-                         placeholder='Select a day of week',
-                         options=[{'label': 'Monday', 'value': 0},
-                                  {'label': 'Tuesday', 'value': 1},
-                                  {'label': 'Wednesday', 'value': 2},
-                                  {'label': 'Thursday', 'value': 3},
-                                  {'label': 'Friday', 'value': 4},
-                                  {'label': 'Saturday', 'value': 5},
-                                  {'label': 'Sunday', 'value': 6}],
+            html.Label('Select pick-up gender'),
+            dcc.Dropdown(id='gender',
+                         placeholder='Select gender',
+                         options=[{'label': 'Female', 'value': 'Female'},
+                                  {'label': 'Male', 'value': 'Male'},
+                                  {'label': 'Binary', 'value': '2'}],
                          value=[],
                          multi=True),
         ]),
@@ -239,18 +247,18 @@ app.layout = html.Div(className='app-body', children=[
             html.Div(className="row", children=[
                 html.Div(className="eight columns pretty_container", children=[
                     dcc.Graph(id='boxplot',
-                              figure=create_figure_boxplot()
+                              figure=create_figure_boxplot(df)
                               )
                 ]),
                 html.Div(className="four columns pretty_container", children=[
                     dcc.Graph(id='pie',
-                              figure=create_figure_pie()),
+                              figure=create_figure_pie(df)),
                 ])
             ]),
             html.Div(className="row", children=[
                 html.Div(className="fix columns pretty_container", children=[
                     dcc.Graph(id='density',
-                              figure=create_figure_density()
+                              figure=create_figure_density(df)
                               )
                 ]),
                 html.Div(className="fix columns pretty_container", children=[
@@ -278,24 +286,44 @@ app.layout = html.Div(className='app-body', children=[
     ]),
     html.Hr(),
     dcc.Markdown(children=about_md),
+    dcc.Markdown(id="sel_gender"),
+
 
 ])
 
-def compute_flow_data(days, age):
-    return 0
+def compute_flow_data(gender, age):
+    df_copy = df.copy()
+    if age:
+        age_min, age_max = age
+        df_copy = df_copy[(df_copy['age'] >= age_min) & (df_copy['age'] <= age_max)]
+    if gender:
+        df_copy = df_copy[df_copy['gender'].isin(gender)]
+
+    return df_copy
 
 # Flow section
 @app.callback(
     Output('pie', 'figure'),
-    Input('days', 'value'),
+    Output('boxplot', 'figure'),
+    Output('density', 'figure'),
+    Output('selected_progress', 'value'),
+    Output('loader-trigger-3', 'children'),
+    Output('data_summary_filtered', 'children'),
+    Output('sel_gender', 'children'),
+    Input('gender', 'value'),
     Input('age', 'value')
 )
-def update_flow_figures(days, age):
-    flow_data = compute_flow_data(days, age)
+def update_flow_figures(gender, age):
+    flow_data = compute_flow_data(gender, age)
 
-    fig_pie = create_figure_pie()
+    fig_pie = create_figure_pie(flow_data)
+    fig_box = create_figure_boxplot(flow_data)
+    fig_density = create_figure_density(flow_data)
 
-    return fig_pie
+    count = len(flow_data)
+    markdown_text = data_summary_filtered_md_template.format(count)
+
+    return fig_pie, fig_box, fig_density, count, "trigger loader", markdown_text, gender
 
 if __name__ == '__main__':
     app.run_server()
