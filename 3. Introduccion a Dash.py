@@ -38,6 +38,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
 from xgboost.sklearn import XGBClassifier
+from plotly.subplots import make_subplots
 
 # A la hora de desarrollar una aplicación para visualizar datos tendremos que combinar 
 # elementos de HTML y CSS con elementos propios de Dash. Lo primero que tendremos que 
@@ -381,6 +382,79 @@ def create_conf_mat():
                       showlegend=False)
     return fig
 
+def create_subplot(categorical, continuous):
+    fig = make_subplots(rows = 1,
+                        cols = 3,
+                        specs =[[{"type": "pie"}, {"type": "bar"},{"type": "bar"}]],
+                        subplot_titles=("Composición de los datos por "+categorical, "Churn % por "+categorical,
+                                        "Violin Plot: "+continuous +" por " +categorical))
+    if categorical=='gender':
+        labels=["Mujeres","Hombres"]
+    else:
+        labels=["Yes","No"]
+
+    # primer gráfico
+    level_count = df[categorical].value_counts()
+
+    fig.add_trace(
+        go.Pie(
+            labels = labels,
+            values=level_count,
+            textinfo='label + percent',
+            insidetextorientation='radial',
+            marker_colors = ["lightblue", "mediumseagreen"],
+            showlegend = False,
+            domain=dict(x=[0, 0.5])
+        ),
+        row = 1,
+        col = 1
+    )
+
+    # Segundo gráfico
+    groups = df.groupby(["churn",categorical])["churn"].count()
+
+    fig.add_trace(
+        go.Bar(
+            y = [groups.values[0],groups.values[1],groups.values[2],groups.values[3]],
+            x = [labels[0]+" Clients that Never Left the Bank",labels[1]+" Clients that Never Left the Bank",labels[0]+" Clients that Have Left the Bank", labels[1]+" Clients that Have Left the Bank"],
+            showlegend = False,
+            marker_color = ["lightblue", "mediumseagreen", "gold", "darkorange"],
+        ),
+        row = 1,
+        col = 2
+    )
+
+    # Tercer gráfico
+    fig.add_trace(
+        go.Violin(
+            x=df[categorical][ df['churn'] == 1 ],
+            y=df[continuous][ df['churn'] == 1 ],
+            legendgroup='Churn Yes', scalegroup='Churn Yes', name='Churn Yes',
+            side='negative',
+            line_color='blue'
+        ),
+        row = 1,
+        col = 3
+    )
+
+
+    fig.add_trace(
+        go.Violin(
+            x=df[categorical][ df['churn'] == 0 ],
+            y=df[continuous][ df['churn'] == 0],
+            legendgroup='Churn No', scalegroup='Churn No', name='Churn No',
+            side='positive',
+            line_color='orange'
+        ),
+        row = 1,
+        col = 3
+    )
+    # Modifico las dimensiones totales y el titulo global
+    fig.update_layout(**fig_layout_defaults,
+                      title = "Información sobre los clientes del banco", bargap = 0.1)
+
+    return fig
+
 # Primer dashboard
 
 # The app layout
@@ -410,6 +484,37 @@ app.layout = html.Div(className='app-body', children=[
     dcc.Tabs(id='tab', children=[
         dcc.Tab(label='EDA', children=[
             # Control panel
+            html.Div(className="row", children=[
+                html.Div(className="twelve columns pretty_container", children=[
+                    html.Div(className="row", children=[
+                        html.Div(className="six columns pretty_container", children=[
+                            html.Label('Select categorical variable'),
+                            dcc.Dropdown(id='categorical',
+                                         placeholder='Select categorical variable',
+                                         options=[{'label': 'Gender', 'value': 'gender'},
+                                                  {'label': 'Credit Card', 'value': 'credit_card'},
+                                                  {'label': 'Active', 'value': 'active_member'}],
+                                         value=['gender'],
+                                         multi=False),
+                        ]),
+                        html.Div(className="six columns pretty_container", children=[
+                            html.Label('Select continuous variable'),
+                            dcc.Dropdown(id='continuous',
+                                         placeholder='Select continuous variable',
+                                         options=[{'label': 'Age', 'value': 'age'},
+                                                  {'label': 'Balance', 'value': 'balance'},
+                                                  {'label': 'Credit score', 'value': 'credit_score'},
+                                                  {'label': 'Salary', 'value': 'estimated_salary'}],
+                                         value=['Male'],
+                                         multi=False),
+                        ]),
+                    ]),
+                    dcc.Graph(id='subplot',
+                              figure=create_subplot('gender', 'estimated_salary')
+                              )
+                ]),
+            ]),
+            html.Hr(),
             html.Div(className="row", id='control-panel', children=[
                 html.Div(className="four columns pretty_container", children=[
                     dcc.Loading(
@@ -476,6 +581,7 @@ app.layout = html.Div(className='app-body', children=[
                               )
                 ])
             ]),
+            html.Hr(),
             html.Div(className="row", children=[
                 html.Div(style={'float': 'left'}, children=[
                     html.H2('XGBoost Threshold Optimization')
@@ -508,6 +614,7 @@ app.layout = html.Div(className='app-body', children=[
                               )
                 ])
             ]),
+            html.Hr(),
             html.Div(className="row", children=[
                 html.Div(style={'float': 'left'}, children=[
                     html.H2('Best Model (Balanced Data):')
@@ -680,6 +787,16 @@ def update_flow_figures(gender, age):
     markdown_text = data_summary_filtered_md_template.format(count)
 
     return fig_pie, fig_box, fig_density, count, "trigger loader", markdown_text
+
+@app.callback(
+    Output('subplot', 'figure'),
+    Input('categorical', 'value'),
+    Input('continuous', 'value')
+)
+def update_flow_figures(categorical, continuous):
+    fig = create_subplot(categorical, continuous)
+
+    return fig
 
 @app.callback(
     Output('prob', 'children'),
