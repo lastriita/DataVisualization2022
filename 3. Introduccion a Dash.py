@@ -50,16 +50,7 @@ app = dash.Dash()
 logging.getLogger('werkzeug').setLevel(logging.INFO)
 
 about_md = '''
-### Dash and Vaex: Big data exposed
-
-An example of an interactive dashboard created with [Vaex](https://github.com/vaexio/vaex) and
-[Dash](https://plotly.com/dash/). Vaex is a high performance DataFrame library enabling efficient, out-of-core computing
-for large datasets comprising millions or billions of samples. Thie example uses Vaex as an engine for computing statistics
-and aggregations which are passed to Plotly to create beautiful diagrams. The dataset shown comprises nearly 120
-million trips conducted by the Yellow Taxies throughout New York City in 2012, and is available via the [Taxi &
-Limousine Commission](https://www1.nyc.gov/site/tlc/about/tlc-trip-record-data.page).
-
-Read [this article](link_placeholder) to learn how to create such dashboards with Vaex and Dash.
+Developed by (AAA): Álvaro Lastra, Armando Sala, and Álvaro Diez de Rivera
 '''
 
 fig_layout_defaults = dict(
@@ -455,6 +446,66 @@ def create_subplot(categorical, continuous):
 
     return fig
 
+def create_kde(flow_data):
+    # primer gráfico
+    x1=flow_data[flow_data["churn"]==0]["age"]
+    x2=flow_data[flow_data["churn"]==1]["age"]
+    hist_data = [x1,x2]
+
+    group_labels = ['Churn no','Churn yes']
+    fig1 = ff.create_distplot(hist_data, group_labels, curve_type = 'normal', show_hist=False,show_rug=False)
+
+    # Segundo gráfico
+    z1=flow_data[flow_data["churn"]==0]["products_number"]
+    z2=flow_data[flow_data["churn"]==1]["products_number"]
+    hist_data_2 = [z1,z2]
+
+    fig2 = ff.create_distplot(hist_data_2, group_labels, curve_type = 'normal', show_hist=False,show_rug=False)
+
+    fig = make_subplots(rows = 2,
+                        cols = 1,
+
+                        subplot_titles=("Distribución del Churn por la edad", "Distribución del Churn por el Balance en Cuenta",
+                                        "Distribución del Churn para el credit score"))
+
+    # primer gráfico
+
+
+    for trace in fig1.select_traces():
+        fig.add_trace(trace, row=1, col=1)
+
+    # Segundo gráfico
+
+    for trace in fig2.select_traces():
+        fig.add_trace(trace, row=2, col=1)
+
+    # Modifico las dimensiones totales y el titulo global
+    fig['layout']['xaxis']['title']='Años en el Banco'
+    fig['layout']['xaxis2']['title']='Número de Productos'
+    fig['layout']['yaxis']['title']='Densidad'
+    fig['layout']['yaxis2']['title']='Densidad'
+    fig.update_layout(**fig_layout_defaults,
+                      title = "Distribución de los clientes del banco",
+                      bargap = 0.1,showlegend=False)
+
+    return fig
+
+def create_map(flow_data):
+    df2 = flow_data.replace('Spain', 'ESP').replace('France', 'FRA').replace('Germany', 'DEU')
+    count = df2['country'].value_counts()
+    #count['count']
+    fig = px.choropleth(count, locations=count.index,
+                        color='country',
+                        #hover_name="country", # column to add to hover information
+                        color_continuous_scale=px.colors.sequential.Plasma)
+
+    fig.update_geos(projection_type="orthographic")
+    fig.update_geos(fitbounds="locations")
+    fig.update_geos(lataxis_showgrid=True, lonaxis_showgrid=True)
+    fig.update_layout(**fig_layout_defaults)
+
+    return fig
+
 # Primer dashboard
 
 # The app layout
@@ -559,13 +610,23 @@ app.layout = html.Div(className='app-body', children=[
                 ])
             ]),
             html.Div(className="row", children=[
+                html.Div(className="twelve columns pretty_container", children=[
+                    dcc.Graph(id='kde',
+                              figure=create_kde(df)
+                              )
+                ]),
+            ]),
+            html.Div(className="row", children=[
                 html.Div(className="fix columns pretty_container", children=[
                     dcc.Graph(id='density',
                               figure=create_figure_density(df)
                               )
                 ]),
                 html.Div(className="fix columns pretty_container", children=[
-                    ]),
+                    dcc.Graph(id='map',
+                              figure=create_map(df)
+                              )
+                ]),
             ]),
         ]),
         dcc.Tab(label='Modeling', children=[
@@ -770,6 +831,8 @@ def compute_flow_data(gender, age):
     Output('pie', 'figure'),
     Output('boxplot', 'figure'),
     Output('density', 'figure'),
+    Output('kde', 'figure'),
+    Output('map', 'figure'),
     Output('selected_progress', 'value'),
     Output('loader-trigger-3', 'children'),
     Output('data_summary_filtered', 'children'),
@@ -782,11 +845,13 @@ def update_flow_figures(gender, age):
     fig_pie = create_figure_pie(flow_data)
     fig_box = create_figure_boxplot(flow_data)
     fig_density = create_figure_density(flow_data)
+    fig_kde = create_kde(flow_data)
+    fig_map = create_map(flow_data)
 
     count = len(flow_data)
     markdown_text = data_summary_filtered_md_template.format(count)
 
-    return fig_pie, fig_box, fig_density, count, "trigger loader", markdown_text
+    return fig_pie, fig_box, fig_density, fig_kde, fig_map, count, "trigger loader", markdown_text
 
 @app.callback(
     Output('subplot', 'figure'),
