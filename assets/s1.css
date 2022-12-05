@@ -55,7 +55,7 @@
   .one.column,
   .one.columns                    { width: 8%;             }
   .two.columns                    { width: 16.25%;         }
-  .three.columns                  { width: 22%;            }
+  .three.columns                  { width: 33%;            }
   .four.columns                   { width: calc(100% / 3);            }
   .five.columns                   { width: calc(100% * 5/12); }
   .six.columns                    { width: 49.75%;          }
